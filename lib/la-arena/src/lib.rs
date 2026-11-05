@@ -155,11 +155,15 @@ impl<T> IdxRange<T> {
     /// let range = la_arena::IdxRange::new_inclusive(foo..=foo);
     /// assert_eq!(&arena[range], &["foo"]);
     /// ```
+    ///
+    /// # Panics
+    ///
+    /// Panics if the end index is `u32::MAX`, as the range cannot be represented.
     pub fn new_inclusive(range: RangeInclusive<Idx<T>>) -> Self {
-        Self {
-            range: u32::from(range.start().into_raw())..u32::from(range.end().into_raw()) + 1,
-            _p: PhantomData,
-        }
+        let end = u32::from(range.end().into_raw())
+            .checked_add(1)
+            .expect("IdxRange::new_inclusive: end index overflows u32");
+        Self { range: u32::from(range.start().into_raw())..end, _p: PhantomData }
     }
 
     /// Returns whether the index range is empty.
@@ -520,5 +524,18 @@ impl<T> Extend<T> for Arena<T> {
         for t in iter {
             self.alloc(t);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[should_panic(expected = "IdxRange::new_inclusive: end index overflows u32")]
+    fn new_inclusive_end_overflow() {
+        let start = Idx::<()>::from_raw(RawIdx::from_u32(0));
+        let end = Idx::<()>::from_raw(RawIdx::from_u32(u32::MAX));
+        let _ = IdxRange::new_inclusive(start..=end);
     }
 }
